@@ -1,97 +1,101 @@
 import cv2
-from matplotlib import pyplot as plt
 import numpy as np
 
-img = cv2.imread('image.jpg')
-brightness = 0
-contrast = [[0, 64, 192, 255], [0, 64, 192, 255]]
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
-imgHistr = cv2.calcHist([img],[0],None,[256],[0,256])
+img = cv2.imread('image2.jpg')
+brightness = 0
+contrast = 0
+saturation = 0
+
+fig, axs = plt.subplots(2, 2)
+fig.suptitle('Histogram')
 
 def updateImage():
-    global imgHistr, brightness, contrast
-
+    # Container
     imgUpdate = img.astype(np.double)
-    imgUpdate += brightness
+
+    # Contrast
+    imgUpdate = np.clip(((.006*contrast+1) if contrast <= 0 else (.04*contrast+1))*(imgUpdate-128)+128, 0, 255)
+
+    # Brightness
+    imgUpdate = np.clip(imgUpdate+brightness, 0, 255)
+
+    # Saturation
+    imgSat = (imgUpdate[:,:,0] + imgUpdate[:,:,1] + imgUpdate[:,:,2])/3
+    lerpT = (saturation+100)/100
+    imgUpdate[:,:,0] = imgSat*(1-lerpT) + imgUpdate[:,:,0]*lerpT
+    imgUpdate[:,:,1] = imgSat*(1-lerpT) + imgUpdate[:,:,1]*lerpT
+    imgUpdate[:,:,2] = imgSat*(1-lerpT) + imgUpdate[:,:,2]*lerpT
+    imgUpdate = np.clip(imgUpdate, 0, 255)
+
+    # Create Histogram
+    histrGs = cv2.calcHist([imgSat.astype(np.uint8)],[0],None,[256],[0,256])
+    histrB = cv2.calcHist([imgUpdate[:,:,0].astype(np.uint8)],[0],None,[256],[0,256])
+    histrG = cv2.calcHist([imgUpdate[:,:,1].astype(np.uint8)],[0],None,[256],[0,256])
+    histrR = cv2.calcHist([imgUpdate[:,:,2].astype(np.uint8)],[0],None,[256],[0,256])
     
-    imgUpdate[imgUpdate[:,:] < contrast[0][1]] *= contrast[1][1] / contrast[0][1]
-    imgUpdate[(imgUpdate[:,:] >= contrast[0][1]) & (imgUpdate[:,:] < contrast[0][2])] = (imgUpdate[(imgUpdate[:,:] >= contrast[0][1]) & (imgUpdate[:,:] < contrast[0][2])] - contrast[0][1]) * ((contrast[1][2]-contrast[1][1])/(contrast[0][2]-contrast[0][1])) + contrast[1][1]
-    imgUpdate[imgUpdate[:,:] >= contrast[0][2]] = (imgUpdate[imgUpdate[:,:] >= contrast[0][2]] - contrast[0][2]) * ((255-contrast[1][2])/(255-contrast[0][2])) + contrast[1][2]
+    # Plot Grayscale
+    axs[0, 0].cla()
+    axs[0, 0].set_title('Grayscale')
+    axs[0, 0].fill_between(np.arange(histrGs.shape[0]), histrGs.reshape(-1), color='gray')
     
+    # Plot Blue
+    axs[0, 1].cla()
+    axs[0, 1].set_title('Blue')
+    axs[0, 1].fill_between(np.arange(histrB.shape[0]), histrB.reshape(-1), color='blue')
+    
+    # Plot Green
+    axs[1, 0].cla()
+    axs[1, 0].set_title('Green')
+    axs[1, 0].fill_between(np.arange(histrG.shape[0]), histrG.reshape(-1), color='green')
+    
+    # Plot Red
+    axs[1, 1].cla()
+    axs[1, 1].set_title('Red')
+    axs[1, 1].fill_between(np.arange(histrR.shape[0]), histrR.reshape(-1), color='red')
+
+    # Show image
     imgUpdate /= 255
     cv2.imshow('Image', imgUpdate)
-
-    imgUpdate[imgUpdate > 1] = 1
-    imgUpdate[imgUpdate < 0] = 0
-
-    imgHistrData = imgUpdate * 255
-    imgHistrData = imgHistrData.astype(np.uint8)
-
-    imgHistr = cv2.calcHist([imgHistrData],[0],None,[256],[0,256])
-
-    plt.figure(0)
-    plt.clf()
-    plt.fill_between(np.arange(imgHistr.shape[0]), imgHistr.reshape(-1))
-    plt.title('Histogram')
-    plt.show(block=False)
-
-    plt.figure(1)
-    plt.clf()
-    plt.plot(contrast[0], contrast[1])
-    plt.title('Contras Function')
-    plt.show(block=False)
+    
+    # Convert histogram canvas to image and show
+    fig.canvas.draw()
+    histoImg = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    histoImg  = histoImg.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    histoImg = cv2.cvtColor(histoImg,cv2.COLOR_RGB2BGR)
+    cv2.imshow("Histogram",histoImg)
 
 def changeBrightness(value):
     global brightness
     brightness = value
     updateImage()
 
-def changeContrast():
-    pass
-
-cv2.imshow('Image', img)
-
-plt.figure(0)
-plt.fill_between(np.arange(imgHistr.shape[0]), imgHistr.reshape(-1))
-plt.title('Histogram')
-plt.show(block=False)
-
-plt.figure(1)
-plt.clf()
-plt.plot(contrast[0], contrast[1])
-plt.title('Contras Function')
-plt.show(block=False)
-
-plt.figure(1)
-plt.plot([1,2,3,4,5])
-plt.title('Contras Function')
-plt.show(block=False)
-
-cv2.namedWindow('Control')
-cv2.createTrackbar('Brightness', 'Control', 0, 255, lambda x: changeBrightness(x))
-cv2.setTrackbarMin('Brightness', 'Control', -255)
-
-def changeX1(x):
-    contrast[0][1] = x
-    updateImage()
-def changeY1(x):
-    contrast[1][1] = x
-    updateImage()
-def changeX2(x):
-    contrast[0][2] = x
-    updateImage()
-def changeY2(x):
-    contrast[1][2] = x
+def changeContrast(value):
+    global contrast
+    contrast = value
     updateImage()
 
-cv2.createTrackbar('Contrast X1', 'Control', 64, 255, changeX1)
-cv2.setTrackbarMin('Contrast X1', 'Control', 0)
-cv2.createTrackbar('Contrast Y1', 'Control', 64, 255, changeY1)
-cv2.setTrackbarMin('Contrast Y1', 'Control', 0)
-cv2.createTrackbar('Contrast X2', 'Control', 192, 255, changeX2)
-cv2.setTrackbarMin('Contrast X2', 'Control', 0)
-cv2.createTrackbar('Contrast Y2', 'Control', 192, 255, changeY2)
-cv2.setTrackbarMin('Contrast Y2', 'Control', 0)
+def changeSaturation(value):
+    global saturation
+    saturation = value
+    updateImage()
 
-cv2.waitKey(0)
+updateImage()
+
+cv2.createTrackbar('Brightness', 'Image', 0, 100, lambda x: changeBrightness(x))
+cv2.setTrackbarMin('Brightness', 'Image', -100)
+
+cv2.createTrackbar('Contrast', 'Image', 0, 100, lambda x: changeContrast(x))
+cv2.setTrackbarMin('Contrast', 'Image', -100)
+
+cv2.createTrackbar('Saturation', 'Image', 0, 100, lambda x: changeSaturation(x))
+cv2.setTrackbarMin('Saturation', 'Image', -100)
+
+while 1:
+    k = cv2.waitKey(33) & 0xFF
+    if k == 27:
+        break
 cv2.destroyAllWindows()
